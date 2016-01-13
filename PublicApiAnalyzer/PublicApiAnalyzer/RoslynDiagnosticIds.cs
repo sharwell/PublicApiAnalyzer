@@ -10,5 +10,7 @@ namespace PublicApiAnalyzer
         public const string ExposedNoninstantiableTypeRuleId = "RS0022";
         public const string PublicApiFilesInvalid = "RS0024";
         public const string DuplicatedSymbolInPublicApiFiles = "RS0025";
+
+        public const string RemoveUnusedResources = "RSxxxx";
     }
 }

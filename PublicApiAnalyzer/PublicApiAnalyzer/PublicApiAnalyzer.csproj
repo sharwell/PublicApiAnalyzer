@@ -52,6 +52,7 @@
     <Compile Include="AnalyzerExtensions.cs" />
     <Compile Include="ApiDesign\DeclarePublicAPIAnalyzer.cs" />
     <Compile Include="ApiDesign\DeclarePublicAPIAnalyzer.Impl.cs" />
+    <Compile Include="ApiDesign\RemoveUnusedResources.cs" />
     <Compile Include="ExcludeFromCodeCoverageAttribute.cs" />
     <Compile Include="GeneratedCodeAnalysisExtensions.cs" />
     <Compile Include="Helpers\AccessLevel.cs" />

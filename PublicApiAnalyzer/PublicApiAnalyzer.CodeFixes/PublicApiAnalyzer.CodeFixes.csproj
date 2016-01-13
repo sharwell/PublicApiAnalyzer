@@ -48,6 +48,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ApiDesign\DeclarePublicAPIFix.cs" />
+    <Compile Include="ApiDesign\RemoveUnusedPropertiesCodeFix.cs" />
     <Compile Include="Helpers\CustomBatchFixAllProvider.cs" />
     <Compile Include="Helpers\CustomFixAllProviders.cs" />
     <Compile Include="Helpers\DocumentBasedFixAllProvider.cs" />
