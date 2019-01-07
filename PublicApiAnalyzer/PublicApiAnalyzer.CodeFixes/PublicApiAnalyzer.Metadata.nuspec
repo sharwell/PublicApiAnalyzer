@@ -6,7 +6,7 @@
     <title>$id$</title>
     <authors>Sam Harwell et. al.</authors>
     <owners>Sam Harwell</owners>
-    <licenseUrl>https://raw.githubusercontent.com/DotNetAnalyzers/PublicApiAnalyzer/$GitCommitIdShort$/LICENSE</licenseUrl>
+    <license type="expression">Apache-2.0</license>
     <projectUrl>https://github.com/DotNetAnalyzers/PublicApiAnalyzer</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>An analyzer for packages with public APIs.</description>
