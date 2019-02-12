@@ -4,26 +4,20 @@
 namespace PublicApiAnalyzer.Test.ApiDesign
 {
     using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Threading;
     using System.Threading.Tasks;
-    using Microsoft.CodeAnalysis;
-    using Microsoft.CodeAnalysis.CodeActions;
-    using Microsoft.CodeAnalysis.CodeFixes;
-    using Microsoft.CodeAnalysis.Diagnostics;
-    using Microsoft.CodeAnalysis.Text;
+    using Microsoft.CodeAnalysis.CSharp.Testing;
+    using Microsoft.CodeAnalysis.Testing;
+    using Microsoft.CodeAnalysis.Testing.Verifiers;
     using PublicApiAnalyzer.ApiDesign;
-    using TestHelper;
     using Xunit;
     using Path = System.IO.Path;
 
-    public class DeclarePublicAPIAnalyzerTests : CodeFixVerifier
+    public class DeclarePublicAPIAnalyzerTests
     {
         private string shippedText;
-        private string shippedFilePath;
+        private string shippedFilePath = DeclarePublicAPIAnalyzer.ShippedFileName;
         private string unshippedText;
-        private string unshippedFilePath;
+        private string unshippedFilePath = DeclarePublicAPIAnalyzer.UnshippedFileName;
 
         [Fact]
         public async Task SimpleMissingTypeAsync()
@@ -37,14 +31,10 @@ public class C
 
             this.shippedText = string.Empty;
             this.unshippedText = string.Empty;
+            var fixedApi = "C" + Environment.NewLine;
 
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("C").WithLocation(2, 14);
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
-
-            string fixedApi = "C" + Environment.NewLine;
-            var updatedApi = await this.GetUpdatedApiAsync(source, 0, CancellationToken.None).ConfigureAwait(false);
-
-            Assert.Equal(fixedApi, updatedApi.ToString());
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("C").WithLocation(2, 14);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedApi, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -62,56 +52,40 @@ public class C
 
             this.shippedText = string.Empty;
             this.unshippedText = string.Empty;
+            var fixedApi = @"C
+C.ArrowExpressionProperty.get -> int
+C.C() -> void
+C.Field -> int
+C.Method() -> void
+C.Property.get -> int
+C.Property.set -> void
+";
 
             DiagnosticResult[] expected =
             {
                 // Test0.cs(2,14): error RS0016: Symbol 'C' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("C").WithLocation(2, 14),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("C").WithLocation(2, 14),
 
                 // Test0.cs(2,14): warning RS0016: Symbol 'implicit constructor for C' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("implicit constructor for C").WithLocation(2, 14),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("implicit constructor for C").WithLocation(2, 14),
 
                 // Test0.cs(4,16): error RS0016: Symbol 'Field' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Field").WithLocation(4, 16),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Field").WithLocation(4, 16),
 
                 // Test0.cs(5,27): error RS0016: Symbol 'Property.get' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Property.get").WithLocation(5, 27),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Property.get").WithLocation(5, 27),
 
                 // Test0.cs(5,32): error RS0016: Symbol 'Property.set' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Property.set").WithLocation(5, 32),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Property.set").WithLocation(5, 32),
 
                 // Test0.cs(6,17): error RS0016: Symbol 'Method' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method").WithLocation(6, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method").WithLocation(6, 17),
 
                 // Test0.cs(7,43): error RS0016: Symbol 'ArrowExpressionProperty.get' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("ArrowExpressionProperty.get").WithLocation(7, 43),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("ArrowExpressionProperty.get").WithLocation(7, 43),
             };
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
-
-            string fixedApi = "C" + Environment.NewLine;
-            var updatedApi = await this.GetUpdatedApiAsync(source, 0, CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(fixedApi, updatedApi.ToString());
-
-            fixedApi = "C.C() -> void" + Environment.NewLine;
-            updatedApi = await this.GetUpdatedApiAsync(source, 1, CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(fixedApi, updatedApi.ToString());
-
-            fixedApi = "C.Field -> int" + Environment.NewLine;
-            updatedApi = await this.GetUpdatedApiAsync(source, 2, CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(fixedApi, updatedApi.ToString());
-
-            fixedApi = "C.Property.get -> int" + Environment.NewLine;
-            updatedApi = await this.GetUpdatedApiAsync(source, 3, CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(fixedApi, updatedApi.ToString());
-
-            fixedApi = "C.Property.set -> void" + Environment.NewLine;
-            updatedApi = await this.GetUpdatedApiAsync(source, 4, CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(fixedApi, updatedApi.ToString());
-
-            fixedApi = "C.Method() -> void" + Environment.NewLine;
-            updatedApi = await this.GetUpdatedApiAsync(source, 5, CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(fixedApi, updatedApi.ToString());
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedApi, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -130,9 +104,9 @@ C -> void()";
             this.unshippedText = string.Empty;
 
             // PublicAPI.Shipped.txt(3,1): warning RS0017: Symbol 'C -> void()' is part of the declared API, but is either not public or could not be found
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule).WithArguments("C -> void()").WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 3, 1);
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule).WithArguments("C -> void()").WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 3, 1);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -149,7 +123,7 @@ C
 C.C() -> void";
             this.unshippedText = string.Empty;
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -166,7 +140,7 @@ C";
             this.unshippedText = @"
 C.C() -> void";
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -183,10 +157,10 @@ C";
             this.unshippedText = string.Empty;
 
             // Test0.cs(2,14): warning RS0016: Symbol 'implicit constructor for C' is not part of the declared API.
-            string arg = string.Format(RoslynDiagnosticsResources.PublicImplicitConstructorErrorMessageName, "C");
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments(arg).WithLocation(2, 14);
+            var arg = string.Format(RoslynDiagnosticsResources.PublicImplicitConstructorErrorMessageName, "C");
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments(arg).WithLocation(2, 14);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -203,10 +177,10 @@ C";
             this.unshippedText = string.Empty;
 
             // Test0.cs(2,15): warning RS0016: Symbol 'implicit constructor for C' is not part of the declared API.
-            string arg = string.Format(RoslynDiagnosticsResources.PublicImplicitConstructorErrorMessageName, "C");
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments(arg).WithLocation(2, 15);
+            var arg = string.Format(RoslynDiagnosticsResources.PublicImplicitConstructorErrorMessageName, "C");
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments(arg).WithLocation(2, 15);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -227,10 +201,10 @@ C.C(int value) -> void";
             this.unshippedText = string.Empty;
 
             // Test0.cs(2,15): warning RS0016: Symbol 'implicit constructor for C' is not part of the declared API.
-            string arg = string.Format(RoslynDiagnosticsResources.PublicImplicitConstructorErrorMessageName, "C");
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments(arg).WithLocation(2, 15);
+            var arg = string.Format(RoslynDiagnosticsResources.PublicImplicitConstructorErrorMessageName, "C");
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments(arg).WithLocation(2, 15);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -249,9 +223,9 @@ C.C() -> void";
             this.unshippedText = string.Empty;
 
             // PublicAPI.Shipped.txt(3,1): warning RS0017: Symbol 'C.C() -> void' is part of the declared API, but is either not public or could not be found
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule).WithArguments("C.C() -> void").WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 3, 1);
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule).WithArguments("C.C() -> void").WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 3, 1);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -276,7 +250,7 @@ C.Method() -> void
 ";
             this.unshippedText = string.Empty;
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -302,7 +276,7 @@ C.Property.set -> void
 C.Method() -> void
 ";
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -327,7 +301,7 @@ E.V2 = 2 -> E
 E.V3 = 3 -> E
 ";
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -354,7 +328,7 @@ C.Method() -> void
 {DeclarePublicAPIAnalyzer.RemovedApiPrefix}C.Method() -> void
 ";
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -378,10 +352,10 @@ C.Property.set -> void
 
             this.unshippedText = string.Empty;
 
-                // error RS0024: The contents of the public API files are invalid: The shipped API file can't have removed members
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.PublicApiFilesInvalid).WithArguments(DeclarePublicAPIAnalyzer.InvalidReasonShippedCantHaveRemoved);
+            // error RS0024: The contents of the public API files are invalid: The shipped API file can't have removed members
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.PublicApiFilesInvalid).WithArguments(DeclarePublicAPIAnalyzer.InvalidReasonShippedCantHaveRemoved);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -406,12 +380,12 @@ C.Property.get -> int
             this.unshippedText = string.Empty;
 
             // Warning RS0025: The symbol 'C.Property.get -> int' appears more than once in the public API files.
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DuplicateSymbolInApiFiles)
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.DuplicateSymbolInApiFiles)
                 .WithArguments("C.Property.get -> int")
                 .WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 6, 1)
                 .WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 4, 1);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -436,12 +410,12 @@ C.Property.set -> void
 C.Property.get -> int";
 
             // Warning RS0025: The symbol 'C.Property.get -> int' appears more than once in the public API files.
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DuplicateSymbolInApiFiles)
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.DuplicateSymbolInApiFiles)
                 .WithArguments("C.Property.get -> int")
                 .WithLocation(DeclarePublicAPIAnalyzer.UnshippedFileName, 2, 1)
                 .WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 4, 1);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -468,11 +442,11 @@ C.Method() -> void
             this.unshippedText = string.Empty;
 
             // PublicAPI.Shipped.txt(7,1): warning RS0017: Symbol 'C.Method() -> void' is part of the declared API, but is either not public or could not be found
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule)
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule)
                 .WithArguments("C.Method() -> void")
                 .WithLocation(DeclarePublicAPIAnalyzer.ShippedFileName, 7, 1);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -503,9 +477,9 @@ C.Method() -> void
             this.unshippedFilePath = Path.Combine(tempPath, DeclarePublicAPIAnalyzer.UnshippedFileName);
 
             // <%TEMP_PATH%>\PublicAPI.Shipped.txt(7,1): warning RS0017: Symbol 'C.Method() -> void' is part of the declared API, but is either not public or could not be found
-            var expected = this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule).WithArguments("C.Method() -> void").WithLocation(this.shippedFilePath, 7, 1);
+            var expected = new DiagnosticResult(DeclarePublicAPIAnalyzer.RemoveDeletedApiRule).WithArguments("C.Method() -> void").WithLocation(this.shippedFilePath, 7, 1);
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -526,7 +500,7 @@ System.StringComparison.OrdinalIgnoreCase = 5 -> System.StringComparison (forwar
 ";
             this.unshippedText = string.Empty;
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -554,7 +528,7 @@ System.StringComparer.StringComparer() -> void (forwarded, contained in mscorlib
 ";
             this.unshippedText = $@"";
 
-            await this.VerifyCSharpDiagnosticAsync(source, EmptyDiagnosticResults, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source).ConfigureAwait(false);
         }
 
         [Fact]
@@ -616,28 +590,28 @@ C.Method6<T>(int p1 = 0) -> T
             DiagnosticResult[] expected =
             {
                 // Test0.cs(5,17): warning RS0016: Symbol 'Method1' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method1").WithLocation(5, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method1").WithLocation(5, 17),
 
                 // Test0.cs(8,17): warning RS0016: Symbol 'Method1' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method1").WithLocation(8, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method1").WithLocation(8, 17),
 
                 // Test0.cs(20,17): warning RS0026: Symbol 'Method4' violates the backcompat requirement: 'Do not add multiple overloads with optional parameters'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method4", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(20, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method4", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(20, 17),
 
                 // Test0.cs(25,17): warning RS0016: Symbol 'Method5' is not part of the declared API.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method5").WithLocation(25, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.DeclareNewApiRule).WithArguments("Method5").WithLocation(25, 17),
 
                 // Test0.cs(25,17): warning RS0026: Symbol 'Method5' violates the backcompat requirement: 'Do not add multiple overloads with optional parameters'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(25, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(25, 17),
 
                 // Test0.cs(26,17): warning RS0026: Symbol 'Method5' violates the backcompat requirement: 'Do not add multiple overloads with optional parameters'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(26, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(26, 17),
 
                 // Test0.cs(27,17): warning RS0026: Symbol 'Method5' violates the backcompat requirement: 'Do not add multiple overloads with optional parameters'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(27, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.AvoidMultipleOverloadsWithOptionalParameters.HelpLinkUri).WithLocation(27, 17),
             };
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -706,19 +680,19 @@ C.Method6(string p1) -> void
             DiagnosticResult[] expected =
             {
                 // Test0.cs(21,17): warning RS0027: Symbol 'Method4' violates the backcompat requirement: 'Public API with optional parameter(s) should have the most parameters amongst its public overloads'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method4", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(21, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method4", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(21, 17),
 
                 // Test0.cs(26,17): warning RS0027: Symbol 'Method5' violates the backcompat requirement: 'Public API with optional parameter(s) should have the most parameters amongst its public overloads'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(26, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method5", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(26, 17),
 
                 // Test0.cs(31,17): warning RS0027: Symbol 'Method6' violates the backcompat requirement: 'Public API with optional parameter(s) should have the most parameters amongst its public overloads'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method6", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(31, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method6", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(31, 17),
 
                 // Test0.cs(32,17): warning RS0027: Symbol 'Method6' violates the backcompat requirement: 'Public API with optional parameter(s) should have the most parameters amongst its public overloads'. See 'https://github.com/DotNetAnalyzers/PublicApiAnalyzer/blob/master/documentation/RS0026.md' for details.
-                this.CSharpDiagnostic(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method6", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(32, 17),
+                new DiagnosticResult(DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters).WithArguments("Method6", DeclarePublicAPIAnalyzer.OverloadWithOptionalParametersShouldHaveMostParameters.HelpLinkUri).WithLocation(32, 17),
             };
 
-            await this.VerifyCSharpDiagnosticAsync(source, expected, CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyAnalyzerAsync(source, expected).ConfigureAwait(false);
         }
 
         [Fact]
@@ -731,7 +705,7 @@ public class C
     public int Property { get; set; }
     public void Method() { } 
     public int ArrowExpressionProperty => 0;
-    public int NewField; // Newly added field, not in current public API.
+    public int {|RS0016:NewField|}; // Newly added field, not in current public API.
 }
 ";
 
@@ -752,7 +726,7 @@ C.NewField -> int
 C.Property.get -> int
 C.Property.set -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
@@ -766,7 +740,7 @@ public class C
     public int Property { get; set; }
     public void Method() { } 
     public int ArrowExpressionProperty => 0;
-    public int NewField;
+    public int {|RS0016:NewField|};
 }
 ";
             this.shippedText = string.Empty;
@@ -775,7 +749,7 @@ C.ArrowExpressionProperty.get -> int
 C.C() -> void
 C.Field -> int
 C.Method() -> void
-C.ObsoleteField -> int
+{|RS0017:C.ObsoleteField -> int|}
 C.Property.get -> int
 C.Property.set -> void";
             var fixedUnshippedText = @"C
@@ -787,14 +761,14 @@ C.NewField -> int
 C.Property.get -> int
 C.Property.set -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestSimpleMissingTypeFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
 }
@@ -805,19 +779,19 @@ public class C
             var fixedUnshippedText = @"C
 ";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestMultipleMissingTypeAndMemberFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
-    public int Field;
+    public int {|RS0016:Field|};
 }
-public class C2 { }
+public class {|RS0016:{|RS0016:C2|}|} { }
 ";
 
             this.shippedText = string.Empty;
@@ -828,7 +802,7 @@ C2
 C2.C2() -> void
 ";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
@@ -838,17 +812,17 @@ C2.C2() -> void
 public class C
 {
     private C() { }
-    public void Method(int p1){ }
+    public void {|RS0016:Method|}(int p1){ }
 }
 ";
 
             this.shippedText = @"C";
 
             // previously method had no params, so the fix should remove the previous overload.
-            this.unshippedText = @"C.Method() -> void";
+            this.unshippedText = @"{|RS0017:C.Method() -> void|}";
             var fixedUnshippedText = @"C.Method(int p1) -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
@@ -860,7 +834,7 @@ public class C
     private C() { }
     public void Method(int p1){ }
     public void Method(int p1, int p2){ }
-    public void Method(char p1){ }
+    public void {|RS0016:Method|}(char p1){ }
 }
 ";
 
@@ -869,10 +843,10 @@ C.Method(int p1) -> void
 C.Method(int p1, int p2) -> void";
 
             // previously method had no params, so the fix should remove the previous overload.
-            this.unshippedText = @"C.Method() -> void";
+            this.unshippedText = @"{|RS0017:C.Method() -> void|}";
             var fixedUnshippedText = @"C.Method(char p1) -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
@@ -882,7 +856,7 @@ C.Method(int p1, int p2) -> void";
 public class C
 {
     private C() { }
-    public void Method(){ }
+    public void {|RS0016:Method|}(){ }
     internal void Method(int p1){ }
     internal void Method(int p1, int p2){ }
     public void Method(char p1){ }
@@ -896,23 +870,23 @@ C.Method(char p1) -> void";
 C.Method() -> void
 C.Method(char p1) -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestMissingTypeAndMemberAndNestedMembersFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
-    public int Field;
+    public int {|RS0016:Field|};
     public class CC
     {
-        public int Field;
+        public int {|RS0016:Field|};
     }
 }
-public class C2 { }
+public class {|RS0016:{|RS0016:C2|}|} { }
 ";
 
             this.shippedText = @"C.CC
@@ -925,23 +899,23 @@ C2
 C2.C2() -> void
 ";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestMissingNestedGenericMembersAndStaleMembersFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
-    public CC<int> Field;
+    public CC<int> {|RS0016:Field|};
     private C3.C4 Field2;
     private C3.C4 Method(C3.C4 p1) { throw new System.NotImplementedException(); }
     public class CC<T>
     {
-        public int Field;
-        public CC<int> Field2;
+        public int {|RS0016:Field|};
+        public CC<int> {|RS0016:Field2|};
     }
 
     public class C3
@@ -949,7 +923,7 @@ public class C
         public class C4 { }
     }
 }
-public class C2 { }
+public class {|RS0016:{|RS0016:C2|}|} { }
 ";
 
             this.shippedText = string.Empty;
@@ -959,8 +933,8 @@ C.C3.C4
 C.C3.C4.C4() -> void
 C.CC<T>
 C.CC<T>.CC() -> void
-C.Field2 -> C.C3.C4
-C.Method(C.C3.C4 p1) -> C.C3.C4
+{|RS0017:C.Field2 -> C.C3.C4|}
+{|RS0017:C.Method(C.C3.C4 p1) -> C.C3.C4|}
 ";
             var fixedUnshippedText = @"C
 C.C3
@@ -976,23 +950,23 @@ C2
 C2.C2() -> void
 ";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestWithExistingUnshippedNestedMembersFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
-    public int Field;
+    public int {|RS0016:Field|};
     public class CC
     {
         public int Field;
     }
 }
-public class C2 { }
+public class {|RS0016:{|RS0016:C2|}|} { }
 ";
 
             this.shippedText = string.Empty;
@@ -1007,7 +981,7 @@ C.Field -> int
 C2
 C2.C2() -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
@@ -1017,7 +991,7 @@ C2.C2() -> void";
 public class C
 {
     private C() { }
-    public class CC
+    public class {|RS0016:CC|}
     {
         public int Field;
     }
@@ -1042,23 +1016,23 @@ C.CC.Field -> int
 C.CC<T>
 C.CC<T>.Field -> int";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestWithExistingShippedNestedMembersFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
-    public int Field;
+    public int {|RS0016:Field|};
     public class CC
     {
         public int Field;
     }
 }
-public class C2 { }
+public class {|RS0016:{|RS0016:C2|}|} { }
 ";
 
             this.shippedText = @"C.CC
@@ -1071,46 +1045,46 @@ C2
 C2.C2() -> void
 ";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestOnlyRemoveStaleSiblingEntriesFixAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:C|}
 {
     private C() { }
-    public int Field;
+    public int {|RS0016:Field|};
     public class CC
     {
         private int Field; // This has a stale public API entry, but this shouldn't be removed unless we attempt to add a public API entry for a sibling.
     }
 }
-public class C2 { }
+public class {|RS0016:{|RS0016:C2|}|} { }
 ";
 
             this.shippedText = string.Empty;
             this.unshippedText = @"
 C.CC
 C.CC.CC() -> void
-C.CC.Field -> int";
+{|RS0017:C.CC.Field -> int|}";
             var fixedUnshippedText = @"C
 C.CC
 C.CC.CC() -> void
-C.CC.Field -> int
+{|RS0017:C.CC.Field -> int|}
 C.Field -> int
 C2
 C2.C2() -> void";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, numberOfFixAllIterations: 2, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Fact]
         public async Task TestAddTrailingNewlineByDefaultAsync()
         {
             var source = @"
-public class C
+public class {|RS0016:{|RS0016:C|}|}
 {
 }
 ";
@@ -1121,7 +1095,7 @@ public class C
 C.C() -> void
 ";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
         [Theory]
@@ -1134,7 +1108,7 @@ C.C() -> void
 public class C
 {
     public int Property { get; }
-    public int NewField; // Newly added field, not in current public API.
+    public int {|RS0016:NewField|}; // Newly added field, not in current public API.
 }
 ";
 
@@ -1147,70 +1121,59 @@ C.C() -> void
 C.NewField -> int
 C.Property.get -> int{expectedEndOfFile}";
 
-            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await this.VerifyCSharpUnshippedFileFixAsync(source, fixedUnshippedText).ConfigureAwait(false);
         }
 
-        protected override IEnumerable<DiagnosticAnalyzer> GetCSharpDiagnosticAnalyzers()
+        private async Task VerifyAnalyzerAsync(string source, params DiagnosticResult[] expected)
         {
-            yield return new DeclarePublicAPIAnalyzer();
+            var test = new CSharpCodeFixTest<DeclarePublicAPIAnalyzer, DeclarePublicAPIFix, XUnitVerifier>
+            {
+                TestCode = source,
+            };
+
+            if (this.unshippedText != null)
+            {
+                test.TestState.AdditionalFiles.Add((this.unshippedFilePath, this.unshippedText));
+            }
+
+            if (this.shippedText != null)
+            {
+                test.TestState.AdditionalFiles.Add((this.shippedFilePath, this.shippedText));
+            }
+
+            test.Exclusions &= ~AnalysisExclusions.GeneratedCode;
+            test.ExpectedDiagnostics.AddRange(expected);
+            await test.RunAsync().ConfigureAwait(false);
         }
 
-        protected override CodeFixProvider GetCSharpCodeFixProvider()
+        private async Task VerifyCSharpUnshippedFileFixAsync(string source, string fixedUnshippedText, params DiagnosticResult[] expected)
         {
-            return new DeclarePublicAPIFix();
-        }
-
-        protected override string GetShippedPublicApi()
-        {
-            return this.shippedText;
-        }
-
-        protected override string GetShippedPublicApiFilePath()
-        {
-            return this.shippedFilePath;
-        }
-
-        protected override string GetUnshippedPublicApi()
-        {
-            return this.unshippedText;
-        }
-
-        protected override string GetUnshippedPublicApiFilePath()
-        {
-            return this.unshippedFilePath;
-        }
-
-        private async Task VerifyCSharpUnshippedFileFixAsync(string source, string fixedUnshippedText, int numberOfFixAllIterations = 1, CancellationToken cancellationToken = default)
-        {
-            VerifyCodeFixAsync verifyAsync =
-                async (Project project, bool fixAll, CancellationToken ct) =>
+            var test = new CSharpCodeFixTest<DeclarePublicAPIAnalyzer, DeclarePublicAPIFix, XUnitVerifier>
+            {
+                TestState =
                 {
-                    var unshippedFile = project.AdditionalDocuments.Single(document => document.Name == DeclarePublicAPIAnalyzer.UnshippedFileName);
-                    Assert.Equal(fixedUnshippedText, (await unshippedFile.GetTextAsync(ct).ConfigureAwait(false)).ToString());
-                };
+                    Sources = { source },
+                    AdditionalFiles =
+                    {
+                        (this.shippedFilePath, this.shippedText ?? string.Empty),
+                        (this.unshippedFilePath, this.unshippedText ?? string.Empty),
+                    },
+                },
+                FixedState =
+                {
+                    Sources = { source },
+                    AdditionalFiles =
+                    {
+                        (this.shippedFilePath, this.shippedText ?? string.Empty),
+                        (this.unshippedFilePath, fixedUnshippedText),
+                    },
+                    InheritanceMode = StateInheritanceMode.Explicit,
+                },
+            };
 
-            await this.VerifyCSharpFixAsync(source, verifyAsync, numberOfFixAllIterations: numberOfFixAllIterations, cancellationToken: CancellationToken.None).ConfigureAwait(false);
-        }
-
-        private async Task<SourceText> GetUpdatedApiAsync(string source, int diagnosticIndex, CancellationToken cancellationToken)
-        {
-            var fixes = await this.GetOfferedCSharpFixesAsync(source, diagnosticIndex, cancellationToken).ConfigureAwait(false);
-            Assert.Equal(1, fixes.Item2.Length);
-
-            var operations = await fixes.Item2[0].GetOperationsAsync(CancellationToken.None).ConfigureAwait(false);
-            Assert.Equal(1, operations.Length);
-            ApplyChangesOperation operation = operations[0] as ApplyChangesOperation;
-            Assert.NotNull(operation);
-
-            var oldSolution = fixes.Item1;
-            var newSolution = operation.ChangedSolution;
-            var solutionChanges = newSolution.GetChanges(oldSolution);
-            var projectChanges = solutionChanges.GetProjectChanges().Single();
-            var changedDocumentId = projectChanges.GetChangedAdditionalDocuments().Single();
-            var newDocument = projectChanges.NewProject.GetAdditionalDocument(changedDocumentId);
-            var newText = await newDocument.GetTextAsync(CancellationToken.None).ConfigureAwait(false);
-
-            return newText;
+            test.Exclusions &= ~AnalysisExclusions.GeneratedCode;
+            test.ExpectedDiagnostics.AddRange(expected);
+            await test.RunAsync().ConfigureAwait(false);
         }
     }
 }
